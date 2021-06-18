@@ -14,28 +14,32 @@ extern "C" void TMAG_TransferFrame(const uint8_t tx[4], uint8_t rx[4]);
 
 namespace TMAG5170Q1 {
     
+
+//#define ENUM enum class
+#define ENUM enum 
+
 class TMAG5170Q1Device {
 public:
     typedef uint8_t CRC;
 
-    enum class RESERVED {
+    ENUM RESERVED {
         
     };
-    enum class RW {
+    ENUM RW  {
         READ = 1,
         WRITE = 0
     };
-    enum class START_CONVERSION {
+    ENUM START_CONVERSION {
         NO_CONVERSION = 0,
         START_AT_CS_LOW = 1
     };
 
-    enum class STAT012_INFO {
+    ENUM STAT012_INFO {
         SET_COUNT = 0,
         DATA_TYPE = 1
     };
 
-    enum class ADDRESS {
+    ENUM ADDRESS {
         DEVICE_CONFIG = 0x0,  //  Configure Device Operation Modes Go
         SENSOR_CONFIG = 0x1, //   Configure Device Operation Modes Go
         SYSTEM_CONFIG = 0x2, //   Configure Device Operation Modes Go
@@ -58,10 +62,17 @@ public:
         MAGNITUDE_RESULT = 0x14, //  Conversion Result Register Go
     };
 
+
+    union  __attribute__((packed))  Value {
+        struct {
+            int16_t value_ : 16;
+        };
+    };
+
     struct __attribute__((packed))  TXFrame {
         ADDRESS address_ : 7;
         RW rw_ : 1; //0:write 1:read
-        int16_t value_ : 16;
+        Value value_;
         CRC  crc_:4;
         START_CONVERSION cmd0_start_conversion_ : 1; //1=> start conversion when CS goes low
         STAT012_INFO cmd1_data_type_in_stat : 1; //0: STAT[0..2] = SET_COUNT[0..2]  1: STAT[0..2] = DATA_TYPE[0..2]
@@ -105,7 +116,7 @@ public:
 
         uint8_t message[4] = {msg[0],msg[1],msg[2],msg[3]};
         message[0] ^= 0xF0;
-        std::uint32_t crc = CRCPP::CRC::CalculateBits(msg, 24, CRCPP::CRC::CRC_4_ITU(),0xF);
+        std::uint32_t crc = CRCPP::CRC::CalculateBits(message, 24, CRCPP::CRC::CRC_4_ITU(),(unsigned char)0x00);
         return crc;
     
     }
@@ -152,7 +163,7 @@ public:
         TMAG_TransferFrame(p_tx,p_rx);
         printf("tx:%02x%02x%02x%02x val=%8d crc=%04x crc_calc=%04x -> ",
             p_tx[0],p_tx[1],p_tx[2],p_tx[3],
-            (int)txbuf_.value_,
+            (int)txbuf_.value_.value_,
             to_bits(txbuf_.crc_),
             to_bits(crc_calc));
 

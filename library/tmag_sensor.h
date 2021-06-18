@@ -60,19 +60,34 @@ public:
         MAG_GAIN_CONFIG = 0x11,  //   Configure Device Operation Modes Go
         ANGLE_RESULT = 0x13,  //   Conversion Result Register Go
         MAGNITUDE_RESULT = 0x14, //  Conversion Result Register Go
+        LAST_ADDRESS
     };
 
 
-    union  __attribute__((packed))  Value {
+    union  __attribute__((packed))  Data {
+        struct {
+
+        } device_config_;
+
         struct {
             int16_t value_ : 16;
-        };
+        } result_;
+        struct __attribute__((packed))  {
+            unsigned int degrees_:12;
+            unsigned int fraction_:4;
+        } angle_;
+
+        struct {
+            int8_t high_;
+            int8_t low_;
+        } threshold_; //X_THRX_CONFIG,Y_THRX_CONFIG,Z_THRX_CONFIG,T_THRX_CONFIG
+
     };
 
     struct __attribute__((packed))  TXFrame {
         ADDRESS address_ : 7;
         RW rw_ : 1; //0:write 1:read
-        Value value_;
+        Data data_;
         CRC  crc_:4;
         START_CONVERSION cmd0_start_conversion_ : 1; //1=> start conversion when CS goes low
         STAT012_INFO cmd1_data_type_in_stat : 1; //0: STAT[0..2] = SET_COUNT[0..2]  1: STAT[0..2] = DATA_TYPE[0..2]
@@ -91,13 +106,7 @@ public:
         unsigned int alert_0_ : 1;
         unsigned int cfg_reset_ : 1;
         unsigned int prev_crc_status_ : 1;
-        union {
-            int16_t value_ : 16;
-            struct __attribute__((packed))  {
-                unsigned int degrees_:12;
-                unsigned int fraction_:4;
-            } angle_;
-        };
+        Data data_;
         CRC crc_:4;
         unsigned int stat012_ : 3; //see TXFrame::cmd1_data_type_in_stat
         unsigned int error_status_ : 1;
@@ -108,6 +117,7 @@ public:
 public:
     TXFrame txbuf_;
     RXFrame rxbuf_;
+    Data datamem[LAST_ADDRESS];
 
     CRC calculate_crc(uint8_t msg[4]) {
 
@@ -141,6 +151,32 @@ public:
         p_tx[0] = 0x60; p_tx[1] = 0x00; p_tx[2] = 0x00; p_tx[3] = 0x8c; //Send frame with valid crc"
     
         transfer_frame(false);
+
+        Data data;
+        data.threshold_.low_ = 23;
+        data.threshold_.high_ = 23;
+        write_data(ADDRESS::X_THRX_CONFIG,data);
+
+        read_data(ADDRESS::X_THRX_CONFIG);
+
+    }
+
+    void write_data(ADDRESS address, Data data) {
+        memset(&txbuf_,0,sizeof(txbuf_));
+        txbuf_.data_ = data;
+        txbuf_.rw_ = RW::WRITE;
+        txbuf_.address_ = address;
+        transfer_frame();
+        datamem[address] = rxbuf_.data_;
+    }
+
+
+    void read_data(ADDRESS address) {
+        memset(&txbuf_,0,sizeof(txbuf_));
+        txbuf_.rw_ = RW::READ;
+        txbuf_.address_ = address;
+        transfer_frame();
+        datamem[address] = rxbuf_.data_;
     }
 
     unsigned int to_bits(CRC crc) {
@@ -163,7 +199,7 @@ public:
         TMAG_TransferFrame(p_tx,p_rx);
         printf("tx:%02x%02x%02x%02x val=%8d crc=%04x crc_calc=%04x -> ",
             p_tx[0],p_tx[1],p_tx[2],p_tx[3],
-            (int)txbuf_.value_.value_,
+            (int)txbuf_.data_.result_.value_,
             to_bits(txbuf_.crc_),
             to_bits(crc_calc));
 
@@ -171,7 +207,7 @@ public:
             p_rx[0],p_rx[1],p_rx[2],p_rx[3],
             rxbuf_.prev_crc_status_, 
             rxbuf_.cfg_reset_,
-            rxbuf_.value_,
+            rxbuf_.data_.result_.value_,
             rxbuf_.error_status_,
             to_bits(rxbuf_.crc_));
     }
